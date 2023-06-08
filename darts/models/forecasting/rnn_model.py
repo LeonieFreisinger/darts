@@ -77,6 +77,10 @@ class _RNNModule(PLDualCovariatesModule):
         self.nr_params = nr_params
         self.name = name
 
+        #RevIn
+        from tot.RevIN import RevIN
+        self.revin_layer = RevIN(len(self.quantiles))
+
         # Defining the RNN module
         self.rnn = getattr(nn, name)(
             input_size, hidden_dim, num_layers, batch_first=True, dropout=dropout
@@ -86,24 +90,21 @@ class _RNNModule(PLDualCovariatesModule):
         self.V = nn.Linear(hidden_dim, target_size * nr_params)
 
     def forward(self, x_in: Tuple, h=None):
-        from tot.RevIN import RevIN
-
         x, _ = x_in
 
         # data is of size (batch_size, input_length, input_size)
         batch_size = x.shape[0]
 
         # apply revin
-        revin_layer = RevIN(x.shape[2])
-        x = revin_layer(x, "norm")
+        x = self.revin_layer(x, "norm")
 
         # out is of size (batch_size, input_length, hidden_dim)
         out, last_hidden_state = self.rnn(x) if h is None else self.rnn(x, h)
 
-        # Here, we apply the V matrix to every hidden state to produce the outputs
+        # Here, we apply the matrix to every hidden state to produce the outputs
         predictions = self.V(out)
         # revin
-        predictions = revin_layer(predictions, "denorm")
+        predictions = self.revin_layer(predictions, "denorm")
 
         # predictions is of size (batch_size, input_length, target_size)
         predictions = predictions.view(batch_size, -1, self.target_size, self.nr_params)
