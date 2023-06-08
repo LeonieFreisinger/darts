@@ -30,7 +30,6 @@ class _RNNModule(PLDualCovariatesModule):
         dropout: float = 0.0,
         **kwargs
     ):
-
         """PyTorch module implementing an RNN to be used in `RNNModel`.
 
         PyTorch module implementing a simple RNN with the specified `name` type.
@@ -87,15 +86,24 @@ class _RNNModule(PLDualCovariatesModule):
         self.V = nn.Linear(hidden_dim, target_size * nr_params)
 
     def forward(self, x_in: Tuple, h=None):
+        from tot.RevIN import RevIN
+
         x, _ = x_in
+
         # data is of size (batch_size, input_length, input_size)
         batch_size = x.shape[0]
+
+        # apply revin
+        revin_layer = RevIN(x.shape[2])
+        x = revin_layer(x, "norm")
 
         # out is of size (batch_size, input_length, hidden_dim)
         out, last_hidden_state = self.rnn(x) if h is None else self.rnn(x, h)
 
         # Here, we apply the V matrix to every hidden state to produce the outputs
         predictions = self.V(out)
+        # revin
+        predictions = revin_layer(predictions, "denorm")
 
         # predictions is of size (batch_size, input_length, target_size)
         predictions = predictions.view(batch_size, -1, self.target_size, self.nr_params)
@@ -164,7 +172,6 @@ class _RNNModule(PLDualCovariatesModule):
         prediction_length = 1
 
         while prediction_length < n:
-
             # create new input to model from last prediction and current covariates, if available
             new_input = (
                 torch.cat(
@@ -205,7 +212,6 @@ class RNNModel(DualCovariatesTorchModel):
         training_length: int = 24,
         **kwargs
     ):
-
         """Recurrent Neural Network Model (RNNs).
 
         This class provides three variants of RNNs:
@@ -450,7 +456,6 @@ class RNNModel(DualCovariatesTorchModel):
         future_covariates: Optional[Sequence[TimeSeries]],
         max_samples_per_ts: Optional[int],
     ) -> DualCovariatesShiftedDataset:
-
         return DualCovariatesShiftedDataset(
             target_series=target,
             covariates=future_covariates,
