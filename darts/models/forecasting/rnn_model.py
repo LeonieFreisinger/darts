@@ -79,7 +79,7 @@ class _RNNModule(PLDualCovariatesModule):
 
         #RevIn
         from darts.models.forecasting.RevIN import RevIN
-        self.revin_layer = RevIN(len(self.quantiles))
+        self.revin_layer = RevIN(len(hidden_dim))
 
         # Defining the RNN module
         self.rnn = getattr(nn, name)(
