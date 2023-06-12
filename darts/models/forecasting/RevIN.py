@@ -31,14 +31,16 @@ class RevIN(nn.Module):
         self.affine_weight = nn.Parameter(torch.ones(self.num_features))
         self.affine_bias = nn.Parameter(torch.zeros(self.num_features))
         # disable learnable
-        #self.affine_weight.requires_grad = False
-        #self.affine_bias.requires_grad = False
+        self.affine_weight.requires_grad = False
+        self.affine_bias.requires_grad = False
 
     def _get_statistics(self, x):
         # dim2reduce = tuple(range(1, x.ndim - 1)) # Batch
         dim2reduce = (1,)  # Instance
         self.mean = torch.mean(x, dim=dim2reduce, keepdim=True).detach()
-        self.stdev = torch.sqrt(torch.var(x, dim=dim2reduce, keepdim=True, unbiased=False) + self.eps).detach()
+        self.stdev = torch.sqrt(
+            torch.var(x, dim=dim2reduce, keepdim=True, unbiased=False) + self.eps
+        ).detach()
 
     def _normalize(self, x):
         x = x - self.mean
