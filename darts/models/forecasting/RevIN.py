@@ -43,8 +43,11 @@ class RevIN(nn.Module):
         ).detach()
 
     def _normalize(self, x):
-        x = x - self.mean
-        x = x / self.stdev
+        #x = x - self.mean
+        #x = x / self.stdev
+        # temp
+        x = x / self.mean
+        
         if self.affine:
             x = x * self.affine_weight
             x = x + self.affine_bias
@@ -54,6 +57,8 @@ class RevIN(nn.Module):
         if self.affine:
             x = x - self.affine_bias
             x = x / (self.affine_weight + self.eps * self.eps)
-        x = x * self.stdev
-        x = x + self.mean
+        # temp
+        x = x * self.mean
+        #x = x * self.stdev
+        #x = x + self.mean
         return x
