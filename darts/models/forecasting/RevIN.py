@@ -41,10 +41,8 @@ class RevIN(nn.Module):
         self.stdev = torch.sqrt(torch.var(x, dim=dim2reduce, keepdim=True, unbiased=False) + self.eps).detach()
 
     def _normalize(self, x):
-        #x = x - self.mean
-        #x = x / self.stdev
-        # temp
-        x = x / self.mean
+        x = x - self.mean
+        x = x / self.stdev
         
         if self.affine:
             x = x * self.affine_weight
@@ -55,8 +53,7 @@ class RevIN(nn.Module):
         if self.affine:
             x = x - self.affine_bias
             x = x / (self.affine_weight + self.eps * self.eps)
-        # temp
-        x = x * self.mean
-        #x = x * self.stdev
-        #x = x + self.mean
+            
+        x = x * self.stdev
+        x = x + self.mean
         return x
