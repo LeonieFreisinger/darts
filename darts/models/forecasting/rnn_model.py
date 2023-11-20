@@ -203,6 +203,10 @@ class RNNModel(DualCovariatesTorchModel):
         n_rnn_layers: int = 1,
         dropout: float = 0.0,
         training_length: int = 24,
+        scaler: Optional[str] = None,
+        norm_mode: Optional[str] = None, #revin or pytorch (not applicable)
+        norm_types: Optional[str] = None, #instance or batch 
+        norm_affines: bool = False, #learnable or nonlearnable
         **kwargs
     ):
 
