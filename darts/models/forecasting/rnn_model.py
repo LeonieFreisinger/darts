@@ -105,9 +105,9 @@ class _RNNModule(PLDualCovariatesModule):
         
         # apply window-based normalization if applicable
         if self.norm_mode is not None:
-            if self.scaler = StandardScaler():
+            if self.scaler == StandardScaler():
                 scaler = "standard"
-            elif self.scaler = MeanScaler():
+            elif self.scaler == MeanScaler():
                 scaler = "mean"
             else:
                 scaler = None
