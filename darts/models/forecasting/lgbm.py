@@ -122,7 +122,6 @@ class LightGBMModel(RegressionModelWithCategoricalCovariates, _LikelihoodMixin):
         self.quantiles = None
         self.likelihood = likelihood
         self._rng = None
-        self.kwargs["n_jobs"] = 1 # -1 does not work on server
 
         # parse likelihood
         available_likelihoods = ["quantile", "poisson"]  # to be extended
