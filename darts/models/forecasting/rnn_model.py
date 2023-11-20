@@ -31,8 +31,8 @@ class _RNNModule(PLDualCovariatesModule):
         dropout: float = 0.0,
         scaler: Optional[str] = None,
         norm_mode: Optional[str] = None, #revin or pytorch (not applicable)
-        norm_types: Optional[str] = None, #instance or batch 
-        norm_affines: bool = False, #learnable or nonlearnable
+        norm_type: Optional[str] = None, #instance or batch 
+        norm_affine: bool = False, #learnable or nonlearnable
         **kwargs
     ):
 
@@ -82,6 +82,10 @@ class _RNNModule(PLDualCovariatesModule):
         self.target_size = target_size
         self.nr_params = nr_params
         self.name = name
+        self.scaler = scaler
+        self.norm_mode = norm_mode
+        self.norm_type = norm_type
+        self.norm_affine = norm_affine
 
         # Defining the RNN module
         self.rnn = getattr(nn, name)(
@@ -219,6 +223,10 @@ class RNNModel(DualCovariatesTorchModel):
         n_rnn_layers: int = 1,
         dropout: float = 0.0,
         training_length: int = 24,
+        scaler: Optional[str] = None,
+        norm_mode: Optional[str] = None, #revin or pytorch (not applicable)
+        norm_type: Optional[str] = None, #instance or batch 
+        norm_affine: bool = False, #learnable or nonlearnable
         **kwargs
     ):
 
@@ -425,6 +433,10 @@ class RNNModel(DualCovariatesTorchModel):
         self.hidden_dim = hidden_dim
         self.n_rnn_layers = n_rnn_layers
         self.training_length = training_length
+        self.scaler = scaler
+        self.norm_mode = norm_mode
+        self.norm_type = norm_type
+        self.norm_affine = norm_affine
 
     def _create_model(self, train_sample: Tuple[torch.Tensor]) -> torch.nn.Module:
         # samples are made of (past_target, historic_future_covariates, future_covariates, future_target)
@@ -444,6 +456,10 @@ class RNNModel(DualCovariatesTorchModel):
                 hidden_dim=self.hidden_dim,
                 dropout=self.dropout,
                 num_layers=self.n_rnn_layers,
+                scaler = self.scaler,
+                norm_mode = self.norm_mode,
+                norm_type = self.norm_type,
+                norm_affine = self.norm_affine,
                 **self.pl_module_params,
             )
         else:
