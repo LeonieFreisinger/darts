@@ -4,12 +4,16 @@ Recurrent Neural Networks
 """
 
 from typing import Optional, Sequence, Tuple, Union
-
+from darts.dataprocessing.transformers.revwinnorm import RevWinNorm
+from tot.data_processing.scaler import Scaler
 import torch
 import torch.nn as nn
 
 from darts.logging import get_logger, raise_if_not
-from darts.models.forecasting.pl_forecasting_module import PLDualCovariatesModule
+from darts.models.forecasting.pl_forecasting_module import (
+    PLDualCovariatesModule,
+    io_processor,
+)
 from darts.models.forecasting.torch_forecasting_model import DualCovariatesTorchModel
 from darts.timeseries import TimeSeries
 from darts.utils.data import DualCovariatesShiftedDataset, TrainingDataset
@@ -28,7 +32,11 @@ class _RNNModule(PLDualCovariatesModule):
         target_size: int,
         nr_params: int,
         dropout: float = 0.0,
-        **kwargs
+        scaler: Scaler = None,
+        norm_mode: Optional[str] = None, #revin or pytorch (not applicable)
+        norm_types: Optional[str] = None, #instance or batch 
+        norm_affines: Optional[bool] = False, #learnable or nonlearnable
+        **kwargs,
     ):
 
         """PyTorch module implementing an RNN to be used in `RNNModel`.
@@ -86,16 +94,35 @@ class _RNNModule(PLDualCovariatesModule):
         # The RNN module needs a linear layer V that transforms hidden states into outputs, individually
         self.V = nn.Linear(hidden_dim, target_size * nr_params)
 
-    def forward(self, x_in: Tuple, h=None):
+    @io_processor
+    def forward(
+        self, x_in: Tuple, h: Optional[torch.Tensor] = None
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        
         x, _ = x_in
         # data is of size (batch_size, input_length, input_size)
         batch_size = x.shape[0]
+        
+        # apply window-based normalization if applicable
+        if self.norm_mode is not None:
+            if self.scaler = StandardScaler():
+                scaler = "standard"
+            elif self.scaler = MeanScaler():
+                scaler = "mean"
+            else:
+                scaler = None
+            window_norm_layer = RevWinNorm(x.shape[2])
+            x = window_norm_layer(x, "norm", norm_type=self.norm_type, scaler=scaler, norm_affine=self.norm_affine)
 
         # out is of size (batch_size, input_length, hidden_dim)
         out, last_hidden_state = self.rnn(x) if h is None else self.rnn(x, h)
 
         # Here, we apply the V matrix to every hidden state to produce the outputs
         predictions = self.V(out)
+        
+        #revert window-based normalization if applicable:
+        if self.norm_mode is not None:
+            predictions = window_norm_layer(predictions, "denorm", norm_type=self.norm_type, scaler=scaler, norm_affine=self.norm_affine)
 
         # predictions is of size (batch_size, input_length, target_size)
         predictions = predictions.view(batch_size, -1, self.target_size, self.nr_params)
@@ -103,7 +130,7 @@ class _RNNModule(PLDualCovariatesModule):
         # returns outputs for all inputs, only the last one is needed for prediction time
         return predictions, last_hidden_state
 
-    def _produce_train_output(self, input_batch: Tuple):
+    def _produce_train_output(self, input_batch: Tuple) -> torch.Tensor:
         (
             past_target,
             historic_future_covariates,
@@ -120,11 +147,16 @@ class _RNNModule(PLDualCovariatesModule):
         )
         return self(model_input)[0]
 
-    def _produce_predict_output(self, x: Tuple, last_hidden_state=None):
+    def _produce_predict_output(
+        self, x: Tuple, last_hidden_state: Optional[torch.Tensor] = None
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
         """overwrite parent classes `_produce_predict_output` method"""
         output, hidden = self(x, last_hidden_state)
         if self.likelihood:
-            return self.likelihood.sample(output), hidden
+            if self.predict_likelihood_parameters:
+                return self.likelihood.predict_likelihood_parameters(output), hidden
+            else:
+                return self.likelihood.sample(output), hidden
         else:
             return output.squeeze(dim=-1), hidden
 
@@ -190,7 +222,6 @@ class _RNNModule(PLDualCovariatesModule):
         # bring predictions into desired format and drop unnecessary values
         batch_prediction = torch.cat(batch_prediction, dim=1)
         batch_prediction = batch_prediction[:, :n, :]
-
         return batch_prediction
 
 
@@ -203,7 +234,7 @@ class RNNModel(DualCovariatesTorchModel):
         n_rnn_layers: int = 1,
         dropout: float = 0.0,
         training_length: int = 24,
-        **kwargs
+        **kwargs,
     ):
 
         """Recurrent Neural Network Model (RNNs).
@@ -315,12 +346,16 @@ class RNNModel(DualCovariatesTorchModel):
             .. highlight:: python
             .. code-block:: python
 
+                def encode_year(idx):
+                    return (idx.year - 1950) / 50
+
                 add_encoders={
                     'cyclic': {'future': ['month']},
                     'datetime_attribute': {'future': ['hour', 'dayofweek']},
                     'position': {'past': ['relative'], 'future': ['relative']},
-                    'custom': {'past': [lambda idx: (idx.year - 1950) / 50]},
-                    'transformer': Scaler()
+                    'custom': {'past': [encode_year]},
+                    'transformer': Scaler(),
+                    'tz': 'CET'
                 }
             ..
         random_state
@@ -377,16 +412,49 @@ class RNNModel(DualCovariatesTorchModel):
         show_warnings
             whether to show warnings raised from PyTorch Lightning. Useful to detect potential issues of
             your forecasting use case. Default: ``False``.
+
+        Examples
+        --------
+        >>> from darts.datasets import WeatherDataset
+        >>> from darts.models import RNNModel
+        >>> series = WeatherDataset().load()
+        >>> # predicting atmospheric pressure
+        >>> target = series['p (mbar)'][:100]
+        >>> # optionally, use future temperatures (pretending this component is a forecast)
+        >>> future_cov = series['T (degC)'][:106]
+        >>> # `training_length` > `input_chunk_length` to mimic inference constraints
+        >>> model = RNNModel(
+        >>>     model="RNN",
+        >>>     input_chunk_length=6,
+        >>>     training_length=18,
+        >>>     n_epochs=20,
+        >>> )
+        >>> model.fit(target, future_covariates=future_cov)
+        >>> pred = model.predict(6)
+        >>> pred.values()
+        array([[ 3.18922903],
+               [ 1.17791019],
+               [ 0.39992814],
+               [ 0.13277921],
+               [ 0.02523252],
+               [-0.01829086]])
+
+        .. note::
+            `RNN example notebook <https://unit8co.github.io/darts/examples/04-RNN-examples.html>`_ presents techniques
+            that can be used to improve the forecasts quality compared to this simple usage example.
         """
         # create copy of model parameters
         model_kwargs = {key: val for key, val in self.model_params.items()}
 
-        if model_kwargs.get("output_chunk_length") is not None:
-            logger.warning(
-                "ignoring user defined `output_chunk_length`. RNNModel uses a fixed `output_chunk_length=1`."
-            )
-
-        model_kwargs["output_chunk_length"] = 1
+        for kwarg, default_value in zip(
+            ["output_chunk_length", "use_reversible_instance_norm"], [1, False]
+        ):
+            if model_kwargs.get(kwarg) is not None:
+                logger.warning(
+                    f"ignoring user defined `{kwarg}`. RNNModel uses a fixed "
+                    f"`{kwarg}={default_value}`."
+                )
+            model_kwargs[kwarg] = default_value
 
         super().__init__(**self._extract_torch_model_params(**model_kwargs))
 
@@ -471,5 +539,10 @@ class RNNModel(DualCovariatesTorchModel):
         )
 
     @property
+    def supports_multivariate(self) -> bool:
+        return True
+
+    @property
     def min_train_series_length(self) -> int:
         return self.training_length + 1
+
