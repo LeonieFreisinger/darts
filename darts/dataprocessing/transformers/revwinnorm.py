@@ -10,19 +10,19 @@ class RevWinNorm(nn.Module):
         :param eps: a value added for numerical stability
         :param affine: if True, RevIN has learnable affine parameters
         """
-        super(RevIN, self).__init__()
+        super(RevWinNorm, self).__init__()
         self.num_features = num_features
         self.eps = eps
         self.affine = affine
         if self.affine:
             self._init_params(norm_affine=norm_affine)
 
-    def forward(self, x, mode: str, scaler: Optional[str], norm_type: str = 'instance'):
+    def forward(self, x, mode: str, wb_scaler: Optional[str], norm_type: str = 'instance'):
         if mode == "norm":
             self._get_statistics(x, norm_type=norm_type)
-            x = self._normalize(x, scaler=scaler)
+            x = self._normalize(x, wb_scaler=wb_scaler)
         elif mode == "denorm":
-            x = self._denormalize(x, scaler=scaler)
+            x = self._denormalize(x, wb_scaler=wb_scaler)
         else:
             raise NotImplementedError
         return x
@@ -47,11 +47,11 @@ class RevWinNorm(nn.Module):
         self.mean = torch.mean(x, dim=dim2reduce, keepdim=True).detach()
         self.stdev = torch.sqrt(torch.var(x, dim=dim2reduce, keepdim=True, unbiased=False) + self.eps).detach()
 
-    def _normalize(self, x, scaler: Optional[str] ='standard'):
-        if scaler == 'standard':
+    def _normalize(self, x, wb_scaler: Optional[str] = 'standard'):
+        if wb_scaler == 'standard':
             x = x - self.mean
             x = x / self.stdev
-        elif scaler == 'mean':
+        elif wb_scaler == 'mean':
             x = x / self.mean
 
         if self.affine:
@@ -59,14 +59,14 @@ class RevWinNorm(nn.Module):
             x = x + self.affine_bias
         return x
 
-    def _denormalize(self, x, norm_type: str='instance', scaler: Optional[str]='standard'):
+    def _denormalize(self, x, norm_type: str = 'instance', wb_scaler: Optional[str] = 'standard'):
         if self.affine:
             x = x - self.affine_bias
             x = x / (self.affine_weight + self.eps*self.eps)
-        if scaler == 'standard':
+        if wb_scaler == 'standard':
             x = x * self.stdev
             x = x + self.mean
-        elif scaler == 'mean':
+        elif wb_scaler == 'mean':
             x = x * self.mean
         return x
 

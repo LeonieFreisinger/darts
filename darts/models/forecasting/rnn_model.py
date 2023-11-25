@@ -29,7 +29,7 @@ class _RNNModule(PLDualCovariatesModule):
         target_size: int,
         nr_params: int,
         dropout: float = 0.0,
-        scaler: Optional[str] = None,
+        wb_scaler: Optional[str] = None,
         norm_mode: Optional[str] = None, #revin or pytorch (not applicable)
         norm_type: Optional[str] = None, #instance or batch 
         norm_affine: bool = False, #learnable or nonlearnable
@@ -82,7 +82,7 @@ class _RNNModule(PLDualCovariatesModule):
         self.target_size = target_size
         self.nr_params = nr_params
         self.name = name
-        self.scaler = scaler
+        self.wb_scaler = wb_scaler
         self.norm_mode = norm_mode
         self.norm_type = norm_type
         self.norm_affine = norm_affine
@@ -103,7 +103,7 @@ class _RNNModule(PLDualCovariatesModule):
         # apply window-based normalization if applicable
         if self.norm_mode is not None:
             window_norm_layer = RevWinNorm(x.shape[2])
-            x = window_norm_layer(x, "norm", norm_type=self.norm_type, scaler=self.scaler, norm_affine=self.norm_affine)
+            x = window_norm_layer(x, "norm", norm_type=self.norm_type, wb_scaler=self.wb_scaler, norm_affine=self.norm_affine)
 
 
         # out is of size (batch_size, input_length, hidden_dim)
@@ -114,7 +114,7 @@ class _RNNModule(PLDualCovariatesModule):
         
         #revert window-based normalization if applicable:
         if self.norm_mode is not None:
-            predictions = window_norm_layer(predictions, "denorm", norm_type=self.norm_type, scaler=self.scaler, norm_affine=self.norm_affine)
+            predictions = window_norm_layer(predictions, "denorm", norm_type=self.norm_type, wb_scaler=self.wb_scaler, norm_affine=self.norm_affine)
 
 
         # predictions is of size (batch_size, input_length, target_size)
@@ -223,7 +223,7 @@ class RNNModel(DualCovariatesTorchModel):
         n_rnn_layers: int = 1,
         dropout: float = 0.0,
         training_length: int = 24,
-        scaler: Optional[str] = None,
+        wb_scaler: Optional[str] = None,
         norm_mode: Optional[str] = None, #revin or pytorch (not applicable)
         norm_type: Optional[str] = None, #instance or batch 
         norm_affine: bool = False, #learnable or nonlearnable
@@ -433,7 +433,7 @@ class RNNModel(DualCovariatesTorchModel):
         self.hidden_dim = hidden_dim
         self.n_rnn_layers = n_rnn_layers
         self.training_length = training_length
-        self.scaler = scaler
+        self.wb_scaler = wb_scaler
         self.norm_mode = norm_mode
         self.norm_type = norm_type
         self.norm_affine = norm_affine
@@ -456,7 +456,7 @@ class RNNModel(DualCovariatesTorchModel):
                 hidden_dim=self.hidden_dim,
                 dropout=self.dropout,
                 num_layers=self.n_rnn_layers,
-                scaler = self.scaler,
+                wb_scaler = self.wb_scaler,
                 norm_mode = self.norm_mode,
                 norm_type = self.norm_type,
                 norm_affine = self.norm_affine,
